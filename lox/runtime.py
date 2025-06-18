@@ -5,70 +5,35 @@ from typing import TYPE_CHECKING
 
 from .ctx import Ctx
 
-if TYPE_CHECKING:
-    from .ast import Stmt, Value
-
-__all__ = [
-    "add",
-    "eq",
-    "ge",
-    "gt",
-    "le",
-    "lt",
-    "mul",
-    "ne",
-    "neg",
-    "not_",
-    "print",
-    "show",
-    "sub",
-    "truthy",
-    "truediv",
-]
-
-
-class LoxInstance:
-    """
-    Classe base para todos os objetos Lox.
-    """
-
+class LoxReturn(Exception):
+    def __init__(self, value):
+        super().__init__()
+        self.value = value
 
 @dataclass
 class LoxFunction:
-    """
-    Classe base para todas as funções Lox.
-    """
-
     name: str
-    args: list[str]
-    body: list["Stmt"]
+    params: list[str]
+    body: object  # Block
     ctx: Ctx
 
-    def __call__(self, *args):
-        env = dict(zip(self.args, args, strict=True))
-        env = self.ctx.push(env)
-
+    def call(self, args):
+        # Checa aridade
+        if len(args) != len(self.params):
+            raise RuntimeError(f"Expected {len(self.params)} arguments but got {len(args)}.")
+        local_ctx = self.ctx.push({})
         try:
-            for stmt in self.body:
-                stmt.eval(env)
-        except LoxReturn as e:
-            return e.value
+            for param, arg in zip(self.params, args):
+                local_ctx.var_def(param, arg)
+            try:
+                self.body.eval(local_ctx)
+            except LoxReturn as ex:
+                return ex.value
+        finally:
+            local_ctx = local_ctx.pop()[1]
 
-
-class LoxReturn(Exception):
-    """
-    Exceção para retornar de uma função Lox.
-    """
-
-    def __init__(self, value):
-        self.value = value
-        super().__init__()
-
-
-class LoxError(Exception):
-    """
-    Exceção para erros de execução Lox.
-    """
+    def __call__(self, *args):
+        return self.call(args)
 
 
 nan = float("nan")

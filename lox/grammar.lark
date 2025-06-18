@@ -1,17 +1,59 @@
 ?start     : program
 
-program    : stmt*
+program    : declaration*
 
-?stmt      : expr ";"
+declaration    : var_dec
+              | function_dec
+              | stmt
+
+function_dec   : "fun" VAR "(" parameters? ")" block
+
+parameters     : VAR ("," VAR)*
+
+?stmt      : expr_stmt
            | print_cmd
-           // | if_cmd
-           // | for_cmd
-           // | ...
+           | if_cmd
+           | for_cmd
+           | while_cmd 
+           | block
+           | return_cmd
+
+for_cmd    : "for" "(" for_init for_cond ";" for_incr ")" stmt
+
+for_init   : var_dec
+           | expr_stmt
+           | ";"
+
+for_cond   : expr?
+for_incr   : expr?
+
+if_cmd     : "if" "(" expr ")" stmt ("else" stmt)?
+
+while_cmd  : "while" "(" expr ")" stmt
 
 print_cmd  : "print" expr ";"
 
+return_cmd : "return" expr? ";"
+
+ expr_stmt : expr ";" 
+
 // EXPRESSÕES
-?expr      : test
+
+block      : "{" declaration* "}"
+
+?expr      : assignment
+
+var_dec    : "var" VAR ("=" expr)? ";"
+
+?assignment: attr "=" assignment   -> setattr
+           | VAR "=" assignment    -> assign
+           | logic_or
+
+?logic_or  : logic_or "or" logic_and   -> or_
+           | logic_and
+
+?logic_and : logic_and "and" test      -> and_
+           | test
 
 ?test      : test "==" cmp  -> eq
            | test "!=" cmp  -> ne
@@ -31,15 +73,20 @@ print_cmd  : "print" expr ";"
            | term "/" atom   -> div 
            | atom
 
-?atom      : NUMBER 
+?attr      : atom ("." VAR)+  -> getatributo   
+
+?atom      : call           
+           | attr
+           | NUMBER 
            | BOOL
            | VAR
            | STRING
            | NIL
            | "(" cmp ")"
-           | call
+           |"!" atom         -> not_
+           | "-" atom         -> neg
 
-call       : VAR "(" params ")"
+call       : atom "(" params ")" 
 params     : [ expr ("," expr )* ]
 
 BOOL.2     : "true" | "false"
