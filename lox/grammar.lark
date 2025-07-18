@@ -2,57 +2,53 @@
 
 program    : declaration*
 
-declaration    : var_dec
-              | function_dec
-              | stmt
+?declaration : var_def
+             | fun_def
+             | class_def
+             | stmt
 
-function_dec   : "fun" VAR "(" parameters? ")" block
+var_def    : "var" VAR "=" expr ";"  -> var_def_init
+           | "var" VAR ";"           -> var_def_no_init
 
-parameters     : VAR ("," VAR)*
+fun_def    : "fun" VAR "(" fun_params ")" block
 
-?stmt      : expr_stmt
+class_def  : "class" VAR "<" VAR "{" class_body "}"  -> class_def_inherit
+           | "class" VAR "{" class_body "}"           -> class_def_simple
+
+class_body : method_def*
+method_def : VAR "(" fun_params ")" block
+
+fun_params : [ VAR ("," VAR )* ]
+
+?stmt      : expr ";"
            | print_cmd
-           | if_cmd
-           | for_cmd
-           | while_cmd 
            | block
-           | return_cmd
+           | if_stmt
+           | while_stmt
+           | for_stmt
+           | return_stmt
 
-for_cmd    : "for" "(" for_init for_cond ";" for_incr ")" stmt
-
-for_init   : var_dec
-           | expr_stmt
-           | ";"
-
+print_cmd  : "print" expr ";"
+block      : "{" declaration* "}"
+if_stmt    : "if" "(" expr ")" stmt ("else" stmt)?
+while_stmt : "while" "(" expr ")" stmt
+for_stmt   : "for" "(" for_init for_cond ";" for_incr ")" stmt
+return_stmt: "return" expr? ";"
+for_init   : var_def | expr ";" | ";"
 for_cond   : expr?
 for_incr   : expr?
 
-if_cmd     : "if" "(" expr ")" stmt ("else" stmt)?
-
-while_cmd  : "while" "(" expr ")" stmt
-
-print_cmd  : "print" expr ";"
-
-return_cmd : "return" expr? ";"
-
- expr_stmt : expr ";" 
-
-// EXPRESSÕES
-
-block      : "{" declaration* "}"
-
 ?expr      : assignment
 
-var_dec    : "var" VAR ("=" expr)? ";"
+?assignment : call "." VAR "=" assignment -> setattr_call
+            | getattr "=" assignment -> setattr_getattr
+            | VAR "=" assignment -> assign
+            | logic_or
 
-?assignment: attr "=" assignment   -> setattr
-           | VAR "=" assignment    -> assign
-           | logic_or
-
-?logic_or  : logic_or "or" logic_and   -> or_
+?logic_or  : logic_or "or" logic_and  -> or_
            | logic_and
 
-?logic_and : logic_and "and" test      -> and_
+?logic_and : logic_and "and" test     -> and_
            | test
 
 ?test      : test "==" cmp  -> eq
@@ -69,28 +65,35 @@ var_dec    : "var" VAR ("=" expr)? ";"
            | factor "-" term  -> sub
            | term
 
-?term      : term "*" atom   -> mul
-           | term "/" atom   -> div 
+?term      : term "*" unary   -> mul
+           | term "/" unary   -> div 
+           | unary
+
+?unary     : "-" unary       -> neg
+           | "!" unary       -> not_
            | atom
 
-?attr      : atom ("." VAR)+  -> getatributo   
+?atom      : primary
+           | call
+           | getattr
 
-?atom      : call           
-           | attr
-           | NUMBER 
+primary    : NUMBER 
            | BOOL
            | VAR
            | STRING
            | NIL
-           | "(" cmp ")"
-           |"!" atom         -> not_
-           | "-" atom         -> neg
+           | THIS
+           | "super" "." VAR -> super_access
+           | "(" expr ")"
 
-call       : atom "(" params ")" 
+getattr    : (primary | call) ("." VAR)+
+call       : (primary | getattr | call) "(" params ")"
+
 params     : [ expr ("," expr )* ]
 
 BOOL.2     : "true" | "false"
-VAR.1      : /[a-z_]\w*/
+THIS.2     : "this"
+VAR.1      : /[a-zA-Z_]\w*/
 NUMBER     : /([1-9][0-9]*|0)(\.[0-9]+)?/ 
 STRING     : /"[^"]*"/
 NIL.2      : "nil"

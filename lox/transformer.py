@@ -9,13 +9,9 @@ métodos desta classe.
 
 from typing import Callable
 from lark import Transformer, v_args
-from dataclasses import dataclass  # <-- Adicione esta linha
 
 from . import runtime as op
-from .ast import (
-    Program, BinOp, Var, Literal, And, Or, UnaryOp, Call, This, Super,
-    Assign, Getattr, Setattr, Print, Return, VarDef, If, While, Block, Function, Class
-)
+from .ast import *
 
 
 def op_handler(op: Callable):
@@ -33,22 +29,14 @@ def op_handler(op: Callable):
 
 @v_args(inline=True)
 class LoxTransformer(Transformer):
-    def start(self, program):
-        return program
-
     def program(self, *stmts):
         return Program(list(stmts))
 
-    def declaration(self, stmt):
-        return stmt
-
-    # Operações matemáticas básicas
     mul = op_handler(op.mul)
     div = op_handler(op.truediv)
     sub = op_handler(op.sub)
     add = op_handler(op.add)
-
-    # Comparações
+    
     gt = op_handler(op.gt)
     lt = op_handler(op.lt)
     ge = op_handler(op.ge)
@@ -56,85 +44,24 @@ class LoxTransformer(Transformer):
     eq = op_handler(op.eq)
     ne = op_handler(op.ne)
 
-    # Outras expressões
-    def call(self, obj, params: list):
-        return Call(obj, params)
+    def call(self, func: Expr, params: list):
+        return Call(func, params)
         
     def params(self, *args):
         params = list(args)
         return params
-    
-    def getatributo(self, value, *attrs):
-        # attrs é uma tupla de Var
+
+    def getattr(self, value, *attrs):
         for attr in attrs:
             value = Getattr(value, attr.name)
         return value
 
-    def not_(self, value):
-        return UnaryOp(op.not_, value)
-    
-    def neg(self, value):
-        return UnaryOp(op.neg, value)
-    
-    def and_(self, left, right):
-        return And(left, right)
-    
-    def or_(self, left, right):
-        return Or(left, right)
-    
-    def assign(self, var, value):
-        return Assign(var.name, value)
-    
-    def setattr(self, obj, value):
-        return Setattr(obj.value, obj.attr, value)
-    
-    def block(self, *stmts):
-        return Block(list(stmts))
-    
-    def if_cmd(self, cond, then_branch, else_branch=None):
-        return If(cond, then_branch, else_branch)
-    
-    def while_cmd(self, expr, stmt):
-        return While(expr, stmt)
-    
-    def var_dec(self, name, value=None):
-        return VarDef(name.name, value)
-    
-    def for_init(self, *args):
-        if len(args) == 0:
-            return Literal(None)
-        return args[0]
-
-    def for_cond(self, *args):
-        if len(args) == 0:
-            return Literal(True)
-        return args[0]
-
-    def for_incr(self, *args):
-        if len(args) == 0:
-            return Literal(None)
-        return args[0]
-
-    def for_cmd(self, init, cond, incr, body):
-        # init, cond, incr já são tratados pelas regras auxiliares
-        # Se init é apenas um Literal(None), não adiciona ao bloco externo
-        stmts = []
-        if not (isinstance(init, Literal) and init.value is None):
-            stmts.append(init)
-        # Corpo do while
-        while_stmts = []
-        if isinstance(body, Block):
-            while_stmts.extend(body.stmts)
+    def lvalue(self, expr, attr=None):
+        if attr is not None:
+            return Getattr(expr, attr.value)
         else:
-            while_stmts.append(body)
-        if not (isinstance(incr, Literal) and incr.value is None):
-            while_stmts.append(incr)
-        while_block = Block(while_stmts)
-        while_stmt = While(cond, while_block)
-        stmts.append(while_stmt)
-        return Block(stmts)
+            return expr
 
-    # Comandos
     def print_cmd(self, expr):
         return Print(expr)
 
@@ -153,27 +80,101 @@ class LoxTransformer(Transformer):
     def NIL(self, _):
         return Literal(None)
 
+    def super(self, _):
+        from .ast import Super
+        return Super()
+    
+    def super_access(self, method_name):
+        from .ast import Super
+        return Super(method_name.name)
+    
+    def THIS(self, _):
+        from .ast import This
+        return This()
+
     def BOOL(self, token):
         return Literal(token == "true")
+
+    def primary(self, child):
+        return child
+
+    def neg(self, expr):
+        return UnaryOp(expr, op.neg)
     
-    def expr_stmt(self, expr):
-        return expr
-
-    def function_dec(self, name, *args):
-        # args pode ser (body,) ou (params, body)
-        if len(args) == 1:
-            params = []
-            body = args[0]
-        elif len(args) == 2:
-            params = args[0]
-            body = args[1]
+    def not_(self, expr):
+        return UnaryOp(expr, op.not_)
+    
+    def and_(self, left, right):
+        return And(left, right)
+    
+    def or_(self, left, right):
+        return Or(left, right)
+    
+    def assign(self, name, value):
+        return Assign(name.name, value)
+    
+    def setattr_call(self, call_expr, attr, value):
+        return Setattr(call_expr, attr.name, value)
+    
+    def setattr_getattr(self, getattr_expr, value):
+        return Setattr(getattr_expr.value, getattr_expr.attr, value)
+    
+    def var_def_init(self, name, value):
+        return VarDef(name.name, value)
+    
+    def var_def_no_init(self, name):
+        return VarDef(name.name, Literal(None))
+    
+    def block(self, *stmts):
+        return Block(list(stmts))
+    
+    def if_stmt(self, condition, then_stmt, else_stmt=None):
+        return If(condition, then_stmt, else_stmt)
+    
+    def while_stmt(self, condition, body):
+        return While(condition, body)
+    
+    def for_stmt(self, init, cond, incr, body):
+        if cond is None:
+            cond = Literal(True)
+        if incr is not None:
+            while_body = Block([body, incr])
         else:
-            raise ValueError("function_dec: argumentos inesperados")
-        param_names = [v.name for v in params]
+            while_body = body
+        while_loop = While(cond, while_body)
+        if init is not None:
+            return Block([init, while_loop])
+        else:
+            return while_loop
+    
+    def for_init(self, init=None):
+        return init
+    
+    def for_cond(self, cond=None):
+        return cond
+    
+    def for_incr(self, incr=None):
+        return incr
+    
+    def fun_def(self, name, params, body):
+        param_names = [param.name for param in params] if params else []
         return Function(name.name, param_names, body)
+    
+    def fun_params(self, *params):
+        return list(params)
+    
+    def return_stmt(self, value=None):
+        return Return(value)
 
-    def parameters(self, *vars):
-        return list(vars)
-
-    def return_cmd(self, expr=None):
-        return Return(expr)
+    def class_def_simple(self, name, methods):
+        return Class(name.name, methods)
+    
+    def class_def_inherit(self, name, superclass, methods):
+        return Class(name.name, methods, superclass.name)
+    
+    def class_body(self, *methods):
+        return list(methods)
+    
+    def method_def(self, name, params, body):
+        param_names = [param.name for param in params] if params else []
+        return Function(name.name, param_names, body)
